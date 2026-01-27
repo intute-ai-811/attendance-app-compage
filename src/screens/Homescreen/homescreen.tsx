@@ -211,20 +211,49 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       );
 
       const res = await fetch(VPS_UPLOAD_URL, {
-        method: 'POST',
-        body: form,
-      });
+  method: 'POST',
+  body: form,
+});
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Upload failed (${res.status}): ${text}`);
-      }
+const data = await res.json().catch(() => null);
 
-      openUModal({
-        kind: 'success',
-        title: 'Attendance Recorded',
-        message: 'Your attendance for today has been successfully recorded.',
-      });
+if (!res.ok) {
+  throw new Error(data?.message || `Upload failed (${res.status})`);
+}
+
+if (!data || !data.status) {
+  throw new Error('Invalid server response');
+}
+
+     switch (data.status) {
+  case 'marked':
+  openUModal({
+    kind: 'success',
+    title: 'Attendance Marked',
+    message: `ID: ${data.user_id || data.person_id}\n${
+      data.message || 'Your attendance has been recorded.'
+    }`,
+  });
+  break;
+
+  case 'no_face':
+  case 'no_match':
+  case 'low_confidence':
+    openUModal({
+      kind: 'warning',
+      title: 'Not Marked',
+      message: data.message || 'Attendance could not be marked.',
+    });
+    break;
+
+  default:
+    openUModal({
+      kind: 'error',
+      title: 'Error',
+      message: data.message || 'Something went wrong.',
+    });
+}
+
     } catch (error: any) {
       console.error('Capture/Upload error:', error);
       openUModal({
