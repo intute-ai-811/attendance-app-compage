@@ -14,6 +14,9 @@ import { styles } from './AddEmployeeScreen.styles';
 import { useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UniversalModal, { UniversalModalProps } from '../../components/UniversalModal';
+import { KeyboardAvoidingView, Platform } from 'react-native';
+import MenuButton from '../../screens/AppDrawer/MenuButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddEmployee'>;
 
@@ -356,23 +359,46 @@ const AddEmployeeScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
+  <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+    {/* Permanent menu button */}
+    <MenuButton />
+
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.pad}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
         <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backBtn}
-            activeOpacity={0.9}
-          >
-            <Icon name="chevron-left" type="font-awesome" size={16} color="#E5E7EB" />
-          </TouchableOpacity>
+          <View style={{ width: 36 }} />
+
           <Text style={styles.title}>Add Employee</Text>
+
           <View style={{ width: 36 }} />
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Basic Details</Text>
+        {/* Stepper */}
+        <View style={styles.stepper}>
+          <View style={[styles.stepChip, styles.stepChipActive]}>
+            <Text style={styles.stepChipText}>1 Details</Text>
+          </View>
+          <View style={[styles.stepChip, (videoRecorded ? styles.stepChipActive : styles.stepChipIdle)]}>
+            <Text style={styles.stepChipText}>2 Face</Text>
+          </View>
+          <View style={[styles.stepChip, (registeredOnML ? styles.stepChipActive : styles.stepChipIdle)]}>
+            <Text style={styles.stepChipText}>3 Submit</Text>
+          </View>
+        </View>
 
+        {/* CARD 1: Employee Details */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Employee Details</Text>
+
+          {/* Full Name */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Full Name</Text>
             <TextInput
@@ -387,6 +413,7 @@ const AddEmployeeScreen: React.FC<Props> = ({ navigation }) => {
             />
           </View>
 
+          {/* Emp ID + User ID */}
           <View style={styles.inputRow}>
             <View style={[styles.inputGroup, styles.inputHalf]}>
               <Text style={styles.label}>Employee ID</Text>
@@ -398,7 +425,6 @@ const AddEmployeeScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.input}
                 autoCapitalize="characters"
                 editable={!submitting}
-                returnKeyType="next"
               />
             </View>
 
@@ -412,11 +438,11 @@ const AddEmployeeScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.input}
                 autoCapitalize="characters"
                 editable={!submitting}
-                returnKeyType="next"
               />
             </View>
           </View>
 
+          {/* Phone + Email */}
           <View style={styles.inputRow}>
             <View style={[styles.inputGroup, styles.inputHalf]}>
               <Text style={styles.label}>Phone Number</Text>
@@ -428,7 +454,6 @@ const AddEmployeeScreen: React.FC<Props> = ({ navigation }) => {
                 style={styles.input}
                 keyboardType="phone-pad"
                 editable={!submitting}
-                returnKeyType="next"
               />
             </View>
 
@@ -443,111 +468,146 @@ const AddEmployeeScreen: React.FC<Props> = ({ navigation }) => {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 editable={!submitting}
-                returnKeyType="next"
               />
             </View>
           </View>
+        </View>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, styles.inputHalf]}>
-              <Text style={styles.label}>Date of Joining (YYYY-MM-DD)</Text>
-              <TextInput
-                placeholder="2025-10-01"
-                placeholderTextColor="#6B7280"
-                value={dateOfJoining}
-                onChangeText={setDateOfJoining}
-                style={styles.input}
-                keyboardType="numeric"
-                editable={!submitting}
-                returnKeyType="next"
-              />
-            </View>
-            <View style={[styles.inputGroup, styles.inputHalf]}>
-              <Text style={styles.label}>Address</Text>
-              <TextInput
-                placeholder="Flat 12B, Lotus Heights, Pune"
-                placeholderTextColor="#6B7280"
-                value={address}
-                onChangeText={setAddress}
-                style={styles.input}
-                editable={!submitting}
-                returnKeyType="done"
-              />
-            </View>
+        {/* CARD 2: Employment Details */}
+        <View style={[styles.card, { marginTop: 12 }]}>
+          <Text style={styles.sectionTitle}>Employment Details</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Date of Joining (YYYY-MM-DD)</Text>
+            <TextInput
+              placeholder="2025-10-01"
+              placeholderTextColor="#6B7280"
+              value={dateOfJoining}
+              onChangeText={setDateOfJoining}
+              style={styles.input}
+              keyboardType="numeric"
+              editable={!submitting}
+            />
           </View>
 
-          <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Face Capture</Text>
-          <View style={styles.photoRow}>
-            <TouchableOpacity
-              style={[styles.addPhotoBtn, submitting && { opacity: 0.6 }]}
-              onPress={async () => {
-                if (!fullName.trim() || !userId.trim() ) {
-  openUModal({
-    kind: 'info',
-    title: 'Details Required',
-    message: 'Please fill User ID before capturing faces.',
-    primaryButton: { text: 'OK' },
-  });
-  return;
-}
-                // persist current draft before navigating away
-                await saveDraft();
-                await AsyncStorage.setItem(RESTORE_FLAG_KEY, '1');
-                setVideoRecorded(false);
-                setRegisteredOnML(false);
-                navigation.navigate('RecordFaceVideo', {
-  userId,
-  fullName,
-  uploadUrl: ML_REGISTER_URL, // pass the ML register endpoint to the capture screen
-} as any);
-              }}
-              activeOpacity={0.9}
-              disabled={submitting}
-            >
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Address</Text>
+            <TextInput
+              placeholder="Flat 12B, Lotus Heights, Pune"
+              placeholderTextColor="#6B7280"
+              value={address}
+              onChangeText={setAddress}
+              style={[styles.input, styles.inputMultiline]}
+              editable={!submitting}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+        </View>
+
+        {/* CARD 3: Face Capture */}
+        <View style={[styles.card, { marginTop: 12 }]}>
+          <Text style={styles.sectionTitle}>Face Capture</Text>
+
+          <View style={styles.faceStatus}>
+            <View style={styles.faceStatusLeft}>
               <Icon
-                name={videoRecorded ? (registeredOnML ? 'check' : 'photo') : 'video-camera'}
+                name={
+                  registeredOnML
+                    ? 'check-circle'
+                    : videoRecorded
+                    ? 'cloud-upload'
+                    : 'user-circle'
+                }
                 type="font-awesome"
                 size={18}
-                color={videoRecorded ? (registeredOnML ? '#22C55E' : '#0EA5E9') : '#0EA5E9'}
+                color={registeredOnML ? '#22C55E' : videoRecorded ? '#0EA5E9' : '#EAB308'}
               />
-              <Text style={styles.addPhotoText}>
-                {videoRecorded
-                  ? (registeredOnML ? 'Uploaded' : 'Captured')
-                  : 'Capture Faces & Upload'}
-              </Text>
-            </TouchableOpacity>
+              <View style={{ marginLeft: 10 }}>
+                <Text style={styles.faceStatusTitle}>
+                  {registeredOnML
+                    ? 'Uploaded'
+                    : videoRecorded
+                    ? 'Captured'
+                    : 'Not started'}
+                </Text>
+                <Text style={styles.faceStatusSub}>
+                  {registeredOnML
+                    ? 'Face data is linked to this employee.'
+                    : 'Capture faces and upload to enable attendance.'}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <TouchableOpacity
-            style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-            onPress={handleSubmit}
+            style={[styles.captureBtn, submitting && { opacity: 0.6 }]}
+            onPress={async () => {
+              if (!fullName.trim() || !userId.trim()) {
+                openUModal({
+                  kind: 'info',
+                  title: 'Details Required',
+                  message: 'Please fill Full Name and User ID before capturing faces.',
+                });
+                return;
+              }
+              await saveDraft();
+              await AsyncStorage.setItem(RESTORE_FLAG_KEY, '1');
+              setVideoRecorded(false);
+              setRegisteredOnML(false);
+
+              navigation.navigate('RecordFaceVideo', {
+  userId,
+  fullName,              // ✅ send fullName key
+  uploadUrl: ML_REGISTER_URL,
+} as any);
+            }}
             activeOpacity={0.9}
             disabled={submitting}
           >
-            {submitting ? (
-              <>
-                <ActivityIndicator size="small" color="#0B1220" />
-                <Text style={{ color: '#0B1220', fontWeight: '900', marginLeft: 8 }}>
-                  Submitting…
-                </Text>
-              </>
-            ) : (
-              <Text style={{ color: '#0B1220', fontWeight: '900' }}>
-                {ERP_CREATE_EMPLOYEE_URL ? 'Submit' : 'Done'}
-              </Text>
-            )}
+            <Icon
+              name={registeredOnML ? 'check' : 'camera'}
+              type="font-awesome"
+              size={16}
+              color={registeredOnML ? '#0B1220' : '#0B1220'}
+            />
+            <Text style={styles.captureBtnText}>
+              {registeredOnML ? 'Re-capture Faces' : 'Capture Faces & Upload'}
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Spacer so content isn't hidden behind sticky footer */}
+        <View style={{ height: 90 }} />
       </ScrollView>
 
-      {/* Global universal modal */}
-      <UniversalModal
-        visible={uVisible}
-        {...uCfg}
-        onRequestClose={() => setUVisible(false)}
-      />
-    </View>
-  );
+      {/* Sticky footer */}
+      <View style={styles.stickyFooter}>
+        <TouchableOpacity
+          style={[styles.stickySubmit, submitting && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          activeOpacity={0.9}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <>
+              <ActivityIndicator size="small" color="#0B1220" />
+              <Text style={styles.stickySubmitText}>Submitting…</Text>
+            </>
+          ) : (
+            <Text style={styles.stickySubmitText}>
+              {ERP_CREATE_EMPLOYEE_URL ? 'Submit Employee' : 'Done'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Universal modal */}
+      <UniversalModal visible={uVisible} {...uCfg} onRequestClose={() => setUVisible(false)} />
+    </KeyboardAvoidingView>
+  </SafeAreaView>
+);
 };
 
 export default AddEmployeeScreen;

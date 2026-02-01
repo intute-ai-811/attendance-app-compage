@@ -103,23 +103,107 @@ export const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // Submit
-  submitBtn: {
-    marginTop: 4,
-    backgroundColor: '#0EA5E9',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
+
+  submitBtnDisabled: {
+    opacity: 0.8,
   },
-  submitText: {
+    // Stepper
+  stepper: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  stepChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  stepChipActive: {
+    backgroundColor: 'rgba(14,165,233,0.18)',
+    borderColor: 'rgba(14,165,233,0.45)',
+  },
+  stepChipIdle: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: '#1F2937',
+  },
+  stepChipText: {
+    color: '#E5E7EB',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+
+  // Multiline
+  inputMultiline: {
+    minHeight: 90,
+    paddingTop: 12,
+  },
+
+  // Face capture status
+  faceStatus: {
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  faceStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  faceStatusTitle: {
+    color: '#F8FAFC',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  faceStatusSub: {
+    marginTop: 2,
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Capture button
+  captureBtn: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 14,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  captureBtnText: {
+    color: '#0B1220',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+
+  // Sticky footer
+  stickyFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 16,
+    backgroundColor: 'rgba(11, 18, 32, 0.92)',
+    borderTopWidth: 1,
+    borderTopColor: '#1F2937',
+  },
+  stickySubmit: {
+    backgroundColor: '#0EA5E9',
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  stickySubmitText: {
     color: '#0B1220',
     fontWeight: '900',
     fontSize: 15,
     letterSpacing: 0.2,
-  },
-  submitBtnDisabled: {
-    opacity: 0.8,
   },
 });

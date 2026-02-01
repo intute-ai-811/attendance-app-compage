@@ -155,5 +155,122 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+
+    // ===== Option A: Modern bottom sheet UI =====
+  sheetWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+
+  sheet: {
+    backgroundColor: 'rgba(17, 24, 39, 0.92)', // slate-900 w/ opacity
+    borderRadius: 24,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+
+  sheetHeader: {
+    marginBottom: 12,
+  },
+
+  sheetTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFF',
+    textAlign: 'left',
+  },
+
+  sheetSubtitle: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#D1D5DB',
+    textAlign: 'left',
+  },
+
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+
+  statusChipText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#E5E7EB',
+    fontWeight: '600',
+  },
+
+  btnPrimary: {
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: '#2563EB', // blue-600
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+
+  btnPrimaryDisabled: {
+    opacity: 0.65,
+  },
+
+  btnPrimaryText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 10,
+  },
+
+  btnSecondary: {
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+
+  btnSecondaryText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 10,
+  },
+    menuButton: {
+  position: 'absolute',
+  top: 18,
+  left: 16,
+  width: 44,
+  height: 44,
+  borderRadius: 14,
+  backgroundColor: 'rgba(17, 24, 39, 0.55)',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 50,
+  elevation: 50,
+},
   
 });

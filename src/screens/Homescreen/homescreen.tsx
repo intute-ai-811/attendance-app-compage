@@ -16,9 +16,24 @@ import { styles } from '../Homescreen/homescreen.styles';
 import { RootStackParamList } from '../../../navigation/types';
 import { useIsFocused } from '@react-navigation/native';
 import UniversalModal, { UniversalModalProps } from '../../components/UniversalModal';
+import MenuButton from '../../screens/AppDrawer/MenuButton';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
+import Tts from 'react-native-tts';
 
 // ======= CONFIG: set your VPS endpoint here =======
 const VPS_UPLOAD_URL = 'http://148.66.155.196:6900/mark_attendance';
+const VPS_LOGOUT_URL = 'http://148.66.155.196:6900/logout';
+const todayKey = () => {
+  // local date key, ex: 2026-01-29
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const CAPTURE_KEY = (day: string) => `attendance:capturePaths:${day}`;
 // ================================================
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -32,7 +47,30 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [capturing, setCapturing] = useState(false);
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const isFocused = useIsFocused();
+  const [loggingOut, setLoggingOut] = useState(false);
   const camera = useRef<Camera>(null);
+
+  useEffect(() => {
+  Tts.setDucking(true);
+
+  Tts.getInitStatus()
+    .then(() => {
+      // Hindi first (India)
+      Tts.setDefaultLanguage('hi-IN')
+        .catch(() => {
+          // fallback to English if Hindi not available
+          Tts.setDefaultLanguage('en-IN').catch(() => {});
+        });
+
+      // Hindi sounds better slightly slower
+      Tts.setDefaultRate(0.85, true);
+    })
+    .catch(() => {});
+
+  return () => {
+    Tts.stop();
+  };
+}, []);
 
   // NEW: Universal modal state
   const [uModal, setUModal] = useState<Omit<UniversalModalProps, 'visible'>>({
@@ -41,6 +79,27 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     message: '',
   });
   const [uVisible, setUVisible] = useState(false);
+
+  const loadTodayCaptures = async () => {
+  try {
+    const key = CAPTURE_KEY(todayKey());
+    const raw = await AsyncStorage.getItem(key);
+    const arr = raw ? (JSON.parse(raw) as string[]) : [];
+    setImagePaths(Array.isArray(arr) ? arr : []);
+  } catch (e) {
+    // fail silently (don’t break camera screen)
+    setImagePaths([]);
+  }
+};
+
+const saveTodayCaptures = async (paths: string[]) => {
+  try {
+    const key = CAPTURE_KEY(todayKey());
+    await AsyncStorage.setItem(key, JSON.stringify(paths));
+  } catch (e) {
+    // ignore
+  }
+};
 
   const openUModal = (cfg: Omit<UniversalModalProps, 'visible'>) => {
     setUModal({
@@ -164,6 +223,113 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     await checkPermissions();
   };
 
+  const handleLogout = async () => {
+  if (!device || !cameraReady) {
+    openUModal({
+      kind: 'info',
+      title: 'Camera not ready',
+      message: 'Please wait until the camera is ready…',
+    });
+    return;
+  }
+
+  if (!hasPermission) {
+    await checkPermissions();
+    return;
+  }
+
+  try {
+    setLoggingOut(true);
+
+    const photo: PhotoFile | undefined = await camera.current?.takePhoto({});
+    if (!photo?.path) {
+      openUModal({
+        kind: 'error',
+        title: 'Capture Failed',
+        message: 'Failed to capture image.',
+      });
+      return;
+    }
+
+    const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
+    const filename = `logout-${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+
+    const form = new FormData();
+    form.append(
+      'file',
+      { uri: fileUri, name: filename, type: 'image/jpeg' } as any
+    );
+
+    const res = await fetch(VPS_LOGOUT_URL, { method: 'POST', body: form });
+    const data = await res.json().catch(() => null);
+
+    console.log('Logout response:', data);
+
+    if (!res.ok) {
+      throw new Error(data?.message || `Logout failed (${res.status})`);
+    }
+
+    if (!data || !data.status) {
+      throw new Error('Invalid server response');
+    }
+
+    switch (data.status) {
+      case 'logged_out': {
+        const shownId = data.user_id ?? data.person_id;
+        const shownName = data.person_name ?? data.name ?? null;
+
+        Tts.stop();
+        if (shownName) {
+          Tts.speak(`${shownName} जी, आपका लॉगआउट सफलतापूर्वक हो गया है।`);
+        } else {
+          Tts.speak('आपका लॉगआउट सफलतापूर्वक हो गया है।');
+        }
+
+        openUModal({
+          kind: 'success',
+          title: 'Logout Marked',
+          message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${
+            data.message || 'Logout marked successfully.'
+          }`,
+        });
+        break;
+      }
+
+      case 'no_face':
+      case 'no_match':
+      case 'low_confidence': {
+        const bestName = data?.best?.person_name;
+        const bestId = data?.best?.person_id;
+
+        openUModal({
+          kind: 'warning',
+          title: 'Logout Not Marked',
+          message: `${bestName ? `Name: ${bestName}\n` : ''}${bestId ? `ID: ${bestId}\n` : ''}${
+            data.message || 'Logout could not be marked.'
+          }`,
+        });
+        break;
+      }
+
+      default:
+        openUModal({
+          kind: 'error',
+          title: 'Error',
+          message: data.message || 'Something went wrong.',
+        });
+    }
+  } catch (e: any) {
+    console.error('Logout error:', e);
+    openUModal({
+      kind: 'error',
+      title: 'Logout Error',
+      message: e?.message ?? 'Failed to logout.',
+    });
+  } finally {
+    setLoggingOut(false);
+  }
+};
+
   // ---- Capture + Upload (no video recording) ----
   const handleCaptureImage = async () => {
     if (!device || !cameraReady) {
@@ -195,7 +361,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      setImagePaths((prev) => [...prev, photo.path]);
+      setImagePaths((prev) => {
+  const updated = [...prev, photo.path];
+  saveTodayCaptures(updated);
+  return updated;
+});
 
       const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
       const filename = `frame-${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
@@ -216,6 +386,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 });
 
 const data = await res.json().catch(() => null);
+console.log('Server response:', data);
 
 if (!res.ok) {
   throw new Error(data?.message || `Upload failed (${res.status})`);
@@ -226,25 +397,44 @@ if (!data || !data.status) {
 }
 
      switch (data.status) {
-  case 'marked':
+  case 'marked': {
+  const shownId = data.user_id ?? data.person_id;
+  const shownName = data.person_name ?? data.name ?? null;
+   console.log('Attendance marked for:', shownName, shownId);
+  Tts.stop();
+
+  // Optional: speak name too (Hindi/English mix)
+  if (shownName) {
+    Tts.speak(`${shownName} जी, आपकी आज की उपस्थिति सफलतापूर्वक दर्ज कर ली गई है।`);
+  } else {
+    Tts.speak('आपकी उपस्थिति सफलतापूर्वक दर्ज कर ली गई है।');
+  }
+
   openUModal({
     kind: 'success',
     title: 'Attendance Marked',
-    message: `ID: ${data.user_id || data.person_id}\n${
+    message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${
       data.message || 'Your attendance has been recorded.'
     }`,
   });
   break;
+}
 
   case 'no_face':
   case 'no_match':
-  case 'low_confidence':
-    openUModal({
-      kind: 'warning',
-      title: 'Not Marked',
-      message: data.message || 'Attendance could not be marked.',
-    });
-    break;
+case 'low_confidence': {
+  const bestName = data?.best?.person_name;
+  const bestId = data?.best?.person_id;
+
+  openUModal({
+    kind: 'warning',
+    title: 'Not Marked',
+    message: `${bestName ? `Name: ${bestName}\n` : ''}${bestId ? `ID: ${bestId}\n` : ''}${
+      data.message || 'Attendance could not be marked.'
+    }`,
+  });
+  break;
+}
 
   default:
     openUModal({
@@ -272,6 +462,13 @@ if (!data || !data.status) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+  if (isFocused) {
+    loadTodayCaptures();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isFocused]);
 
   // ---- Early UI returns ----
   if (!permissionAsked || !hasPermission) {
@@ -374,37 +571,75 @@ if (!data || !data.status) {
         }}
       />
 
+      
+
       <View style={styles.controlOverlay}>
-        <Text style={styles.title}>Mark Your Attendance</Text>
+         <MenuButton />
+  {/* Bottom sheet */}
+  <View style={styles.sheetWrap}>
+    <View style={styles.sheet}>
+      <View style={styles.sheetHeader}>
+        <Text style={styles.sheetTitle}>Mark Attendance</Text>
+        <Text style={styles.sheetSubtitle}>
+          Align your face in the frame and tap Mark.
+        </Text>
 
-        <View style={styles.controlPanel}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleCaptureImage}
-            activeOpacity={0.8}
-            disabled={capturing}
-          >
-            <Icon name="camera" size={40} color="#FFF" style={{ marginBottom: 10 }} />
-            <Text style={styles.actionButtonText}>
-              {capturing ? 'Capturing...' : 'Capture Image'}
+        <View style={styles.statusRow}>
+          <View style={styles.statusChip}>
+            <Icon
+              name={(capturing || loggingOut) ? 'cloud-upload' : cameraReady ? 'check-circle' : 'clock-o'}
+              type="font-awesome"
+              size={14}
+              color="#E5E7EB"
+            />
+            <Text style={styles.statusChipText}>
+              {(capturing || loggingOut) ? 'Uploading…' : cameraReady ? 'Ready' : 'Initializing…'}
             </Text>
-            <Text style={styles.actionButtonSubtitle}>
-              {capturing ? 'Processing & uploading' : 'Send current frame to server'}
-            </Text>
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Dashboard', { imagePaths })}
-            activeOpacity={0.8}
-          >
-            <Icon name="dashboard" size={40} color="#FFF" style={{ marginBottom: 10 }} />
-            <Text style={styles.actionButtonText}>Dashboard</Text>
-            <Text style={styles.actionButtonSubtitle}>Go to your dashboard and settings</Text>
-          </TouchableOpacity>
+          <Text style={{ color: '#D1D5DB', fontSize: 12, fontWeight: '600' }}>
+            {imagePaths.length} captures
+          </Text>
         </View>
       </View>
 
+      <TouchableOpacity
+        style={[styles.btnPrimary, (capturing || !cameraReady) && styles.btnPrimaryDisabled]}
+        onPress={handleCaptureImage}
+        activeOpacity={0.9}
+        disabled={capturing || !cameraReady}
+      >
+        {capturing ? (
+          <ActivityIndicator />
+        ) : (
+          <Icon name="camera" type="font-awesome" size={18} color="#FFF" />
+        )}
+        <Text style={styles.btnPrimaryText}>
+          {capturing ? 'Marking…' : 'Mark Attendance'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+  style={[styles.btnPrimary, (loggingOut || capturing || !cameraReady) && styles.btnPrimaryDisabled, { marginTop: 12 }]}
+  onPress={handleLogout}
+  activeOpacity={0.9}
+  disabled={loggingOut || capturing || !cameraReady}
+>
+  {loggingOut ? (
+    <ActivityIndicator />
+  ) : (
+    <Icon name="sign-out" type="font-awesome" size={18} color="#FFF" />
+  )}
+  <Text style={styles.btnPrimaryText}>
+    {loggingOut ? 'Logging out…' : 'Logout'}
+  </Text>
+</TouchableOpacity>
+
+      
+    </View>
+  </View>
+</View>
+  
       {/* Universal Modal (global) */}
       <UniversalModal
         visible={uVisible}

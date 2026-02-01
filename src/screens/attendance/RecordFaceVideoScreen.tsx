@@ -20,6 +20,9 @@ import RNFS from 'react-native-fs';
 import { Icon } from 'react-native-elements';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import UniversalModal, { UniversalModalProps } from '../../components/UniversalModal';
+import Tts from 'react-native-tts';
+import MenuButton from '../../screens/AppDrawer/MenuButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const DRAFT_KEY = 'addEmployeeDraft:v1';
 const RESTORE_FLAG_KEY = 'addEmployee:restoreOnReturn';
@@ -152,6 +155,41 @@ const stopCaptureRef = useRef<() => Promise<void> | null>(null);
       setPermissionAsked(true);
     }
   }, []);
+
+  useEffect(() => {
+  // Basic setup
+  Tts.setDucking(true); // lower other audio while speaking
+
+  // Prefer Indian English (fallbacks if not available)
+  Tts.getInitStatus()
+    .then(() => {
+      // Try these in order
+      Tts.setDefaultLanguage('en-IN').catch(() => {
+        Tts.setDefaultLanguage('en-US').catch(() => {});
+      });
+
+      // Speech rate (0.4–0.6 feels good)
+      Tts.setDefaultRate(0.62, true);
+    })
+    .catch(() => {
+      // If TTS engine missing or disabled, we won’t block the flow
+    });
+
+  return () => {
+    Tts.stop();
+  };
+}, []);
+
+useEffect(() => {
+  if (!recording) return;
+
+  const phrase = FACE_PROMPTS[promptIndex];
+  if (!phrase) return;
+
+  // stop any previous speech and speak current prompt
+  Tts.stop();
+  Tts.speak(phrase);
+}, [promptIndex, recording]);
 
   useEffect(() => {
     if (!permissionAsked) checkPermissions();
@@ -324,6 +362,8 @@ const stopCaptureRef = useRef<() => Promise<void> | null>(null);
 
   const finalizeUpload = useCallback(async () => {
     setBusy(true);
+    Tts.stop();
+Tts.speak('Uploading your face data. Please wait.');
 
     try {
       // last-chance capture if nothing collected yet
@@ -415,13 +455,15 @@ const stopCaptureRef = useRef<() => Promise<void> | null>(null);
   openUModal({
     kind: 'warning',
     title: 'Missing Info',
-    message: 'User ID is required before recording.',
+    message: 'User ID and Full Name are required before recording.',
   });
   return;
 }
 
     try {
       setRecording(true);
+      Tts.stop();
+Tts.speak('Starting face registration. Follow the instructions.');
       setBusy(false);
       framePathsRef.current = [];
       setCapturedCount(0);
@@ -456,6 +498,8 @@ const stopCaptureRef = useRef<() => Promise<void> | null>(null);
   }, [device, cameraReady, hasPermission, userId, fullName,totalPrompts, totalDurationMs]);
 
   const stopCapture = useCallback(async () => {
+    Tts.stop();
+Tts.speak('Stopping capture.');
   clearTimers();
   try {
     await finalizeUpload();
@@ -472,21 +516,12 @@ useEffect(() => {
 
   return (
     <View style={s.wrap}>
-      <View style={s.header}>
-        <TouchableOpacity
-          style={s.backBtn}
-          onPress={() => {
-            if (recording || busy) return;
-            navigation.goBack();
-          }}
-        >
-          <Icon name="chevron-left" type="font-awesome" size={16} color="#E5E7EB" />
-          <Text style={s.backTxt}>Back</Text>
-        </TouchableOpacity>
-
-        <Text style={s.title}>Face Registration</Text>
-        <View style={{ width: 72 }} />
-      </View>
+      <MenuButton />
+      <SafeAreaView edges={['top']} style={s.safeTop}>
+  <View style={s.header}>
+    <Text style={s.title}>Face Registration</Text>
+  </View>
+</SafeAreaView>
 
       <View style={s.cameraBox}>
         {!hasPermission ? (
@@ -533,9 +568,12 @@ useEffect(() => {
               {recording ? (
                 <>
                   <View style={s.promptPill}>
-                    <Text style={s.promptTxt}>{FACE_PROMPTS[promptIndex]}</Text>
-                  </View>
-                  <Text style={s.countdown}>{promptCountdown}s</Text>
+  <Text style={s.promptTxt}>{FACE_PROMPTS[promptIndex]}</Text>
+  <Text style={s.promptSub}>
+    Step {promptIndex + 1} / {FACE_PROMPTS.length}
+  </Text>
+</View>
+<Text style={s.countdown}>{promptCountdown}s</Text>
                 </>
               ) : (
                 <Text style={s.readyTxt}>
@@ -586,27 +624,19 @@ useEffect(() => {
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#0B1220' },
   header: {
-    height: 56,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-    backgroundColor: '#111827',
-  },
-  backTxt: { color: '#E5E7EB', fontWeight: '800', fontSize: 12 },
-  title: { color: '#F8FAFC', fontWeight: '800', fontSize: 14 },
+  paddingTop: 8,          // add a bit more breathing room
+  paddingBottom: 12,
+  paddingHorizontal: 12,
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderBottomWidth: 1,
+  borderBottomColor: '#1E293B',
+},
+ title: {
+  color: '#F8FAFC',
+  fontWeight: '900',
+  fontSize: 16,
+},
 
   cameraBox: { flex: 1 },
   camera: { flex: 1 },
@@ -651,39 +681,33 @@ const s = StyleSheet.create({
   },
 
   controls: {
-    height: 110,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    backgroundColor: '#0F172A',
-    flexDirection: 'row',
-    gap: 12,
-  },
+  padding: 16,
+  borderTopWidth: 1,
+  borderTopColor: '#1E293B',
+  backgroundColor: 'rgba(15,23,42,0.96)',
+},
   mainBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#7DD3FC',
-    borderWidth: 6,
-    borderColor: '#1E293B',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 999,
-  },
-  mainBtnTxt: { color: '#0B1220', fontWeight: '900', fontSize: 16 },
+  height: 54,
+  borderRadius: 18,
+  backgroundColor: '#0EA5E9',
+  width: '100%',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexDirection: 'row',
+  gap: 10,
+},
+mainBtnTxt: { color: '#0B1220', fontWeight: '900', fontSize: 16 },
 
   stopBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FCD34D',
-    borderWidth: 4,
-    borderColor: '#1E293B',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 999,
-  },
+  height: 54,
+  borderRadius: 18,
+  backgroundColor: '#FCD34D',
+  width: '100%',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexDirection: 'row',
+  gap: 10,
+},
   stopBtnTxt: { color: '#0B1220', fontWeight: '900' },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
@@ -697,6 +721,16 @@ const s = StyleSheet.create({
     gap: 12,
   },
   loadingTxt: { color: '#E5E7EB', fontWeight: '800' },
+  promptSub: {
+  marginTop: 4,
+  color: '#BAE6FD',
+  fontWeight: '800',
+  fontSize: 12,
+  textAlign: 'center',
+},
+safeTop: {
+  backgroundColor: '#0B1220',
+},
 });
 
 export default RecordFaceVideoScreen;
