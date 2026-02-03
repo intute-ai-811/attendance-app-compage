@@ -18,6 +18,7 @@ import SideMenu from './src/screens/SideMenu/SideMenu';
 import { navigationRef, navigate } from './src/navigation/navigationRef';
 import BootSplash from "react-native-bootsplash";
 import BrandOverlay from "./src/screens/Splash/BrandOverlay";
+import { requestInitialPermissionsOnce } from "./src/utils/requestInitialPermissions";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -85,6 +86,20 @@ const App = () => {
 
     init();
   }, []);
+
+  useEffect(() => {
+  const init = async () => {
+    // Ask permissions on first launch
+    await requestInitialPermissionsOnce();
+
+    // then your splash hide logic
+    await new Promise(res => setTimeout(res, 300));
+    BootSplash.hide({ fade: true });
+    setTimeout(() => setShowBrand(false), 1400);
+  };
+
+  init();
+}, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

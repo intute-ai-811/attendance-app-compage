@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { Camera, useCameraDevice, PhotoFile } from 'react-native-vision-camera';
 import { Icon } from 'react-native-elements';
-import { check, request, PERMISSIONS, RESULTS, openSettings } from 'react-native-permissions';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { styles } from '../Homescreen/homescreen.styles';
 import { RootStackParamList } from '../../../navigation/types';
@@ -40,10 +39,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
-  const [hasPermission, setHasPermission] = useState(false);
-  const [permissionAsked, setPermissionAsked] = useState(false);
+
   const [cameraReady, setCameraReady] = useState(false);
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
+ const [hasPermission, setHasPermission] = useState<boolean | null>(null); // null = checking
   const [capturing, setCapturing] = useState(false);
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const isFocused = useIsFocused();
@@ -70,6 +68,15 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   return () => {
     Tts.stop();
   };
+}, []);
+
+useEffect(() => {
+  const sub = AppState.addEventListener('change', (state) => {
+    if (state === 'active') {
+      checkOnlyCameraPermission();
+    }
+  });
+  return () => sub.remove();
 }, []);
 
   // NEW: Universal modal state
@@ -131,97 +138,25 @@ const saveTodayCaptures = async (paths: string[]) => {
   // In your setup, devices is an array
   const device = useCameraDevice('front');
 
-  // ---- Permissions (Camera only; no microphone needed) ----
-  const checkPermissions = async () => {
-    try {
-      let cameraStatus;
+  
 
-      if (Platform.OS === 'android') {
-        cameraStatus = await check(PERMISSIONS.ANDROID.CAMERA);
-      } else {
-        cameraStatus = await check(PERMISSIONS.IOS.CAMERA);
-      }
+  const checkOnlyCameraPermission = async () => {
+  try {
+    const status = await Camera.getCameraPermissionStatus();
+    setHasPermission(status === 'granted');
+  } catch (e) {
+    setHasPermission(false);
+  }
+};
 
-      if (cameraStatus === RESULTS.GRANTED) {
-        const cameraPermission = await Camera.getCameraPermissionStatus();
-        if (cameraPermission === 'granted') {
-          setHasPermission(true);
-        } else {
-          setHasPermission(false);
-          setShowPermissionModal(true);
-        }
-      } else {
-        setHasPermission(false);
-        setShowPermissionModal(true);
-      }
-      setPermissionAsked(true);
-    } catch (error) {
-      console.error('Permission check error:', error);
-      openUModal({
-        kind: 'error',
-        title: 'Permission Error',
-        message: 'Failed to check permissions.',
-      });
-    }
-  };
-
-  const requestSystemPermissions = async () => {
-    try {
-      let cameraStatus;
-
-      if (Platform.OS === 'android') {
-        cameraStatus = await request(PERMISSIONS.ANDROID.CAMERA);
-      } else {
-        cameraStatus = await request(PERMISSIONS.IOS.CAMERA);
-      }
-
-      if (cameraStatus === RESULTS.GRANTED) {
-        const cameraPermission = await Camera.requestCameraPermission();
-        if (cameraPermission === 'granted') {
-          setHasPermission(true);
-        } else {
-          setHasPermission(false);
-          openUModal({
-            kind: 'warning',
-            title: 'Permission Denied',
-            message: 'Camera access is required.',
-          });
-        }
-      } else if (cameraStatus === RESULTS.BLOCKED) {
-        openUModal({
-          kind: 'warning',
-          title: 'Permission Blocked',
-          message: 'Camera access is blocked. Please enable it in Settings.',
-          primaryButton: {
-            text: 'Open Settings',
-            onPress: () => openSettings(),
-          },
-          secondaryButton: {
-            text: 'Cancel',
-          },
-        });
-      } else {
-        setHasPermission(false);
-      }
-    } catch (error) {
-      console.error('Permission request error:', error);
-      openUModal({
-        kind: 'error',
-        title: 'Permission Error',
-        message: 'Failed to request permissions.',
-      });
-    }
-  };
-
-  const handlePermissionRequest = async (option: 'allow' | 'onlyThisTime' | 'deny') => {
-    setShowPermissionModal(false);
-    if (option === 'deny') {
-      setPermissionAsked(true);
-      return;
-    }
-    await requestSystemPermissions();
-    await checkPermissions();
-  };
+const requestCameraPermission = async () => {
+  try {
+    const newStatus = await Camera.requestCameraPermission();
+    setHasPermission(newStatus === 'granted');
+  } catch (e) {
+    setHasPermission(false);
+  }
+};
 
   const handleLogout = async () => {
   if (!device || !cameraReady) {
@@ -233,10 +168,10 @@ const saveTodayCaptures = async (paths: string[]) => {
     return;
   }
 
-  if (!hasPermission) {
-    await checkPermissions();
-    return;
-  }
+  if (hasPermission !== true) {
+  await requestCameraPermission();
+  return;
+}
 
   try {
     setLoggingOut(true);
@@ -279,19 +214,38 @@ const saveTodayCaptures = async (paths: string[]) => {
         const shownName = data.person_name ?? data.name ?? null;
 
         Tts.stop();
-        if (shownName) {
-          Tts.speak(`${shownName} जी, आपका लॉगआउट सफलतापूर्वक हो गया है।`);
-        } else {
-          Tts.speak('आपका लॉगआउट सफलतापूर्वक हो गया है।');
-        }
+        const serverMsg: string = data.message || 'Logout marked successfully.';
+const already = serverMsg.toLowerCase().includes('already logged out');
 
-        openUModal({
-          kind: 'success',
-          title: 'Logout Marked',
-          message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${
-            data.message || 'Logout marked successfully.'
-          }`,
-        });
+Tts.stop();
+
+if (already) {
+  // ✅ already logged out
+  if (shownName) {
+    Tts.speak(`${shownName} जी, आपका लॉगआउट पहले से दर्ज है।`);
+  } else {
+    Tts.speak('आपका लॉगआउट पहले से दर्ज है।');
+  }
+
+  openUModal({
+    kind: 'info',
+    title: 'Already Logged Out',
+    message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${serverMsg}`,
+  });
+} else {
+  // ✅ newly logged out
+  if (shownName) {
+    Tts.speak(`${shownName} जी, आपका लॉगआउट सफलतापूर्वक हो गया है।`);
+  } else {
+    Tts.speak('आपका लॉगआउट सफलतापूर्वक हो गया है।');
+  }
+
+  openUModal({
+    kind: 'success',
+    title: 'Logout Marked',
+    message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${serverMsg}`,
+  });
+}
         break;
       }
 
@@ -341,10 +295,10 @@ const saveTodayCaptures = async (paths: string[]) => {
       return;
     }
 
-    if (!hasPermission) {
-      await checkPermissions();
-      return;
-    }
+    if (hasPermission !== true) {
+  await requestCameraPermission();
+  return;
+}
 
     try {
       setCapturing(true);
@@ -404,6 +358,26 @@ if (!data || !data.status) {
   Tts.stop();
 
   // Optional: speak name too (Hindi/English mix)
+  const serverMsg: string = data.message || 'Attendance marked successfully.';
+const already = serverMsg.toLowerCase().includes('already checked in');
+
+Tts.stop();
+
+if (already) {
+  // ✅ already marked today
+  if (shownName) {
+    Tts.speak(`${shownName} जी, आपकी उपस्थिति पहले से दर्ज है।`);
+  } else {
+    Tts.speak('आपकी उपस्थिति पहले से दर्ज है।');
+  }
+
+  openUModal({
+    kind: 'info',
+    title: 'Already Marked',
+    message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${serverMsg}`,
+  });
+} else {
+  // ✅ newly marked
   if (shownName) {
     Tts.speak(`${shownName} जी, आपकी आज की उपस्थिति सफलतापूर्वक दर्ज कर ली गई है।`);
   } else {
@@ -413,10 +387,9 @@ if (!data || !data.status) {
   openUModal({
     kind: 'success',
     title: 'Attendance Marked',
-    message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${
-      data.message || 'Your attendance has been recorded.'
-    }`,
+    message: `${shownName ? `Name: ${shownName}\n` : ''}ID: ${shownId}\n${serverMsg}`,
   });
+}
   break;
 }
 
@@ -457,11 +430,8 @@ case 'low_confidence': {
   };
 
   useEffect(() => {
-    if (!permissionAsked) {
-      checkPermissions();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  checkOnlyCameraPermission();
+}, []);
 
   useEffect(() => {
   if (isFocused) {
@@ -471,70 +441,42 @@ case 'low_confidence': {
 }, [isFocused]);
 
   // ---- Early UI returns ----
-  if (!permissionAsked || !hasPermission) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Mark your Attendance</Text>
+  // ---- Early UI returns ----
+if (hasPermission === null) {
+  return (
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color="#1F2937" />
+      <Text style={styles.text}>Checking camera permission...</Text>
+    </View>
+  );
+}
+if (hasPermission === false) {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Mark your Attendance</Text>
 
-        {/* Retain your existing permission modal UI (can be swapped to UniversalModal later if you want) */}
-        {/* {!hasPermission && (
-          <Modal
-            transparent
-            visible={showPermissionModal}
-            animationType="fade"
-            onRequestClose={() => setShowPermissionModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Icon name="camera" type="font-awesome" size={40} color="#00AEEF" style={styles.modalIcon} />
-                <Text style={styles.modalTitle}>Allow adas_system to use the camera?</Text>
-                <Text style={styles.modalSubtitle}>While using the app</Text>
-                <TouchableOpacity style={styles.modalButton} onPress={() => handlePermissionRequest('allow')}>
-                  <Text style={styles.modalButtonText}>WHILE USING THE APP</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalButton} onPress={() => handlePermissionRequest('onlyThisTime')}>
-                  <Text style={styles.modalButtonText}>ONLY THIS TIME</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalButton} onPress={() => handlePermissionRequest('deny')}>
-                  <Text style={styles.modalButtonText}>DON'T ALLOW</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-        )} */}
+      <TouchableOpacity
+        style={styles.card}
+       onPress={requestCameraPermission}  // IMPORTANT
+        activeOpacity={0.8}
+      >
+        <Icon name="camera" size={40} color="#1F2937" style={{ marginBottom: 10 }} />
+        <Text style={styles.cardTitle}>Permissions Required</Text>
+        <Text style={styles.cardSubtitle}>Tap to grant camera permission</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.card}
-          onPress={handleCaptureImage}
-          activeOpacity={0.8}
-          disabled={!hasPermission}
-        >
-          <Icon name="camera" size={40} color="#1F2937" style={{ marginBottom: 10 }} />
-          <Text style={styles.cardTitle}>{hasPermission ? 'Capture Image' : 'Permissions Required'}</Text>
-          <Text style={styles.cardSubtitle}>
-            {hasPermission ? 'Capture a frame and send to server' : 'Please grant camera permission'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, { marginTop: 20 }]}
-          onPress={() => navigation.navigate('Dashboard', { imagePaths })}
-          activeOpacity={0.8}
-        >
-          <Icon name="dashboard" size={40} color="#1F2937" style={{ marginBottom: 10 }} />
-          <Text style={styles.cardTitle}>Dashboard</Text>
-          <Text style={styles.cardSubtitle}>Go to your dashboard and settings</Text>
-        </TouchableOpacity>
-
-        {/* Universal Modal (global) */}
-        <UniversalModal
-          visible={uVisible}
-          {...uModal}
-          onRequestClose={() => setUVisible(false)}
-        />
-      </View>
-    );
-  }
+      <TouchableOpacity
+        style={[styles.card, { marginTop: 20 }]}
+        onPress={() => navigation.navigate('Dashboard', { imagePaths })}
+        activeOpacity={0.8}
+      >
+        <Icon name="dashboard" size={40} color="#1F2937" style={{ marginBottom: 10 }} />
+        <Text style={styles.cardTitle}>Dashboard</Text>
+        <Text style={styles.cardSubtitle}>Go to your dashboard and settings</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
   if (!device) {
     return (
